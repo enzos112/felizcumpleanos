@@ -40,36 +40,34 @@ function init() {
     const startBtn = document.getElementById('start-btn');
     const welcomeScreen = document.getElementById('welcome-screen');
     
-    // 2. EVENTO DE INICIO (Con retraso de estabilización)
-    if(startBtn) {
-        startBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            
-            // --- DESBLOQUEO CRÍTICO Y REPRODUCCIÓN ---
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
-            if (AudioContext) {
-                const ctx = new AudioContext();
-                if (ctx.state === 'suspended') {
-                    ctx.resume();
-                }
+    // --- EVENTO DE INICIO (CLIC BLINDADO CON TIEMPO DE GRACIA) ---
+if(startBtn) {
+    startBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        
+        // 1. Despertar el motor de audio (Context Resume)
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (AudioContext) {
+            const ctx = new AudioContext();
+            if (ctx.state === 'suspended') {
+                await ctx.resume().catch(error => console.error("Could not resume AudioContext:", error));
             }
+        }
 
-            // Ordenamos la reproducción
-            if(oceanAudio) oceanAudio.play().catch(error => console.error("Fallo audio mar:", error));
-            if(musicAudio) musicAudio.play().catch(error => console.error("Fallo audio música:", error));
-            
-            // Ocultar pantalla
-            welcomeScreen.classList.add('hidden');
-            
-            // --- SOLUCIÓN DE ESTABILIDAD: Retraso de 250ms ---
-            // Damos tiempo al hilo de audio para que inicie antes de que WebGL congele el CPU.
-            setTimeout(() => {
-                animate();
-                console.log("INICIO: Animación 3D arrancada después de la estabilización del audio.");
-            }, 250); 
-            
-        });
-    }
+        welcomeScreen.classList.add('hidden');
+        
+        // 2. REPRODUCCIÓN SIMPLE Y DIRECTA
+        if(oceanAudio) oceanAudio.play().catch(error => console.error("Fallo audio mar:", error));
+        if(musicAudio) musicAudio.play().catch(error => console.error("Fallo audio música:", error));
+        
+        // --- LA SOLUCIÓN FINAL: DIFERIR ANIMATE() ---
+        // Esperamos 10ms para darle prioridad al hilo de audio antes de iniciar el WebGL pesado.
+        setTimeout(() => {
+            animate();
+            console.log("3D INICIADO después de estabilización de audio.");
+        }, 100); // 100ms es un buen margen de seguridad
+    });
+}
 
     // --- CONTROL DE MUTE (Resto del código sigue igual) ---
     const muteBtn = document.getElementById('mute-btn');
