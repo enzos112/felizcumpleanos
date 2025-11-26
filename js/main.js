@@ -30,89 +30,62 @@ function init() {
         setupWelcomeAnimation(); 
     }
 
-    // ============================================
-    // CAPTURAR Y CONFIGURAR AUDIO
-    // ============================================
+    // 1. CAPTURAR AUDIO
     const oceanAudio = document.getElementById('bg-ocean');
     const musicAudio = document.getElementById('bg-music');
     
-    // Verificar que existen
-    if (!oceanAudio || !musicAudio) {
-        console.error('❌ ERROR: Elementos de audio no encontrados en el DOM');
-        return;
-    }
-    
-    // Configurar volumen inicial
-    oceanAudio.volume = 0.4;
-    musicAudio.volume = 0.5;
+    if(oceanAudio) oceanAudio.volume = 0.4;
+    if(musicAudio) musicAudio.volume = 0.5;
 
     const startBtn = document.getElementById('start-btn');
     const welcomeScreen = document.getElementById('welcome-screen');
     
-    // ============================================
-    // EVENTO DE INICIO - MÉTODO ROBUSTO PARA MÓVILES
-    // ============================================
-    if (startBtn) {
-        startBtn.addEventListener('click', async (e) => {
-            e.preventDefault();
+    // 2. EVENTO DE INICIO (CLIC BLINDADO CON ASYNC/AWAIT)
+    if(startBtn) {
+        // Usamos 'async' para poder usar 'await' en las promesas de audio
+        startBtn.addEventListener('click', async (e) => { 
             e.stopPropagation();
             
-            console.log('🎯 Botón presionado - Iniciando audio...');
-            
-            // 1. DESBLOQUEAR AUDIOCONTEXT (iOS/Android)
+            // --- TRUCO CRÍTICO: DESPERTAR EL MOTOR DE AUDIO ---
             const AudioContext = window.AudioContext || window.webkitAudioContext;
             if (AudioContext) {
                 const ctx = new AudioContext();
+                // Si el motor está suspendido (estado default en móvil), lo reanudamos
                 if (ctx.state === 'suspended') {
-                    await ctx.resume();
-                    console.log('✅ AudioContext desbloqueado');
+                    await ctx.resume().catch(error => console.error("Could not resume AudioContext:", error));
                 }
-                // Cerramos el contexto temporal (solo era para desbloquear)
-                ctx.close();
             }
+
+            welcomeScreen.classList.add('hidden');
             
-            // 2. REPRODUCIR AUDIO CON REINTENTO AGRESIVO
-            const playAudio = async (audio, name) => {
-                try {
-                    // Forzar carga si no está lista
-                    if (audio.readyState < 2) {
-                        console.log(`⏳ Cargando ${name}...`);
-                        await audio.load();
+            // FUNCIÓN DE REPRODUCCIÓN ROBUSTA
+            const stablePlay = async (audioElement) => {
+                if (audioElement) {
+                    try {
+                        await audioElement.play();
+                        console.log(`✅ Audio ${audioElement.id} reproduciendo`);
+                    } catch (error) {
+                        // Si falla la promesa (bloqueo), esperamos 100ms y reintentamos.
+                        console.warn(`⚠️ Bloqueo detectado, reintentando ${audioElement.id}...`);
+                        setTimeout(() => {
+                             audioElement.play().catch(finalError => console.error(`❌ ${audioElement.id} Falló definitivamente.`));
+                        }, 100);
                     }
-                    
-                    // Intentar reproducir
-                    await audio.play();
-                    console.log(`✅ ${name} reproduciendo`);
-                } catch (error) {
-                    console.warn(`⚠️ Error en ${name}:`, error.message);
-                    
-                    // REINTENTO INMEDIATO (crítico para móviles)
-                    setTimeout(async () => {
-                        try {
-                            await audio.play();
-                            console.log(`✅ ${name} reproduciendo (reintento)`);
-                        } catch (retryError) {
-                            console.error(`❌ ${name} falló definitivamente:`, retryError);
-                        }
-                    }, 100);
                 }
             };
             
-            // Ejecutar en paralelo
+            // Disparamos la reproducción en paralelo
             await Promise.all([
-                playAudio(oceanAudio, 'Ocean'),
-                playAudio(musicAudio, 'Music')
-            ]);
+                stablePlay(oceanAudio),
+                stablePlay(musicAudio)
+            ]).catch(error => console.warn("Uncaught error during parallel audio start.")); // Atrapa fallos globales
             
-            // 3. OCULTAR PANTALLA Y EMPEZAR ANIMACIÓN
-            welcomeScreen.classList.add('hidden');
+            // 4. Iniciar animación 3D
             animate();
         });
     }
 
-    // ============================================
-    // CONTROL DE MUTE (ACTUALIZADO)
-    // ============================================
+    // --- CONTROL DE MUTE (Resto del código igual) ---
     const muteBtn = document.getElementById('mute-btn');
     let isMuted = false;
     
@@ -120,39 +93,26 @@ function init() {
         muteBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             isMuted = !isMuted;
-            
             if (isMuted) {
-                oceanAudio.volume = 0;
-                musicAudio.volume = 0;
+                if(oceanAudio) oceanAudio.volume = 0;
+                if(musicAudio) musicAudio.volume = 0;
                 muteBtn.textContent = "🔇";
-                console.log('🔇 Audio silenciado');
             } else {
-                oceanAudio.volume = 0.4;
-                musicAudio.volume = 0.5;
+                if(oceanAudio) oceanAudio.volume = 0.4;
+                if(musicAudio) musicAudio.volume = 0.5;
                 muteBtn.textContent = "🔊";
-                console.log('🔊 Audio activado');
             }
         });
     }
 
-    // ============================================
-    // MONITOREO DE ESTADO (DEBUG)
-    // ============================================
-    // Elimina esto en producción, pero útil para diagnosticar
-    setInterval(() => {
-        if (oceanAudio && musicAudio) {
-            console.log('🎵 Estado Audio:', {
-                ocean: { paused: oceanAudio.paused, ready: oceanAudio.readyState },
-                music: { paused: musicAudio.paused, ready: musicAudio.readyState }
-            });
-        }
-    }, 5000); // Cada 5 segundos
-
-    // Responsive y gestos
+    // --- RESPONSIVE Y GESTOS ---
     onWindowResize(); 
-    document.addEventListener('gesturestart', e => e.preventDefault());
-    document.addEventListener('touchmove', e => {
-        if (e.scale !== 1) e.preventDefault();
+
+    document.addEventListener('gesturestart', function(e) {
+        e.preventDefault();
+    });
+    document.addEventListener('touchmove', function(e) {
+        if (e.scale !== 1) { e.preventDefault(); }
     }, { passive: false });
 }
 
