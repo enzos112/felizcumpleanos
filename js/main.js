@@ -31,8 +31,8 @@ function init() {
     }
 
     // 1. CAPTURAR AUDIO
-    const oceanAudio = document.getElementById('bg-ocean');
-    const musicAudio = document.getElementById('bg-music');
+    oceanAudio = document.getElementById('bg-ocean');
+    musicAudio = document.getElementById('bg-music');
     
     if(oceanAudio) oceanAudio.volume = 0.4;
     if(musicAudio) musicAudio.volume = 0.5;
@@ -40,52 +40,38 @@ function init() {
     const startBtn = document.getElementById('start-btn');
     const welcomeScreen = document.getElementById('welcome-screen');
     
-    // 2. EVENTO DE INICIO (CLIC BLINDADO CON ASYNC/AWAIT)
+    // 2. EVENTO DE INICIO (Con retraso de estabilización)
     if(startBtn) {
-        // Usamos 'async' para poder usar 'await' en las promesas de audio
-        startBtn.addEventListener('click', async (e) => { 
+        startBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             
-            // --- TRUCO CRÍTICO: DESPERTAR EL MOTOR DE AUDIO ---
+            // --- DESBLOQUEO CRÍTICO Y REPRODUCCIÓN ---
             const AudioContext = window.AudioContext || window.webkitAudioContext;
             if (AudioContext) {
                 const ctx = new AudioContext();
-                // Si el motor está suspendido (estado default en móvil), lo reanudamos
                 if (ctx.state === 'suspended') {
-                    await ctx.resume().catch(error => console.error("Could not resume AudioContext:", error));
+                    ctx.resume();
                 }
             }
 
+            // Ordenamos la reproducción
+            if(oceanAudio) oceanAudio.play().catch(error => console.error("Fallo audio mar:", error));
+            if(musicAudio) musicAudio.play().catch(error => console.error("Fallo audio música:", error));
+            
+            // Ocultar pantalla
             welcomeScreen.classList.add('hidden');
             
-            // FUNCIÓN DE REPRODUCCIÓN ROBUSTA
-            const stablePlay = async (audioElement) => {
-                if (audioElement) {
-                    try {
-                        await audioElement.play();
-                        console.log(`✅ Audio ${audioElement.id} reproduciendo`);
-                    } catch (error) {
-                        // Si falla la promesa (bloqueo), esperamos 100ms y reintentamos.
-                        console.warn(`⚠️ Bloqueo detectado, reintentando ${audioElement.id}...`);
-                        setTimeout(() => {
-                             audioElement.play().catch(finalError => console.error(`❌ ${audioElement.id} Falló definitivamente.`));
-                        }, 100);
-                    }
-                }
-            };
+            // --- SOLUCIÓN DE ESTABILIDAD: Retraso de 250ms ---
+            // Damos tiempo al hilo de audio para que inicie antes de que WebGL congele el CPU.
+            setTimeout(() => {
+                animate();
+                console.log("INICIO: Animación 3D arrancada después de la estabilización del audio.");
+            }, 250); 
             
-            // Disparamos la reproducción en paralelo
-            await Promise.all([
-                stablePlay(oceanAudio),
-                stablePlay(musicAudio)
-            ]).catch(error => console.warn("Uncaught error during parallel audio start.")); // Atrapa fallos globales
-            
-            // 4. Iniciar animación 3D
-            animate();
         });
     }
 
-    // --- CONTROL DE MUTE (Resto del código igual) ---
+    // --- CONTROL DE MUTE (Resto del código sigue igual) ---
     const muteBtn = document.getElementById('mute-btn');
     let isMuted = false;
     
