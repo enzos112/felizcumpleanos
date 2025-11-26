@@ -20,45 +20,63 @@ let audioCtx = null;
 window.addEventListener('load', init);
 
 function init() {
-    // 1. Cargar escena 3D inmediatamente (para que esté lista al clic)
     setupScene();
     
-    // 2. Configurar animación de bienvenida
+    // Configurar animación de bienvenida
     if (typeof setupWelcomeAnimation === "function") { 
         setupWelcomeAnimation(); 
     }
 
-    // 3. CAPTURAR AUDIO (Usando elementos DOM)
+    // 1. REFERENCIAR AUDIOS (Del DOM)
     oceanAudio = document.getElementById('bg-ocean');
     musicAudio = document.getElementById('bg-music');
     
-    // Configurar volumen
     if(oceanAudio) oceanAudio.volume = 0.4;
     if(musicAudio) musicAudio.volume = 0.5;
 
     const startBtn = document.getElementById('start-btn');
     const welcomeScreen = document.getElementById('welcome-screen');
     
-    // 4. EVENTO DE INICIO (LA LÓGICA MÁS SIMPLE Y SEGURA)
+    // 2. EVENTO DE INICIO (CLIC BLINDADO)
     if(startBtn) {
         startBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             
-            // Ocultar pantalla
+            // --- TRUCO CRÍTICO: DESPERTAR EL MOTOR DE AUDIO ---
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (AudioContext) {
+                const ctx = new AudioContext();
+                if (ctx.state === 'suspended') {
+                    ctx.resume();
+                    console.log("AUDIO_CONTEXT_STATUS: Motor de audio reactivado.");
+                } else {
+                    console.log("AUDIO_CONTEXT_STATUS: Motor ya estaba activo.");
+                }
+            }
+
             welcomeScreen.classList.add('hidden');
             
-            // ORDEN DIRECTA DE REPRODUCCIÓN
-            // Quitamos los catch() y AudioContext para máxima estabilidad. 
-            // Con el clic es suficiente para desbloquearlo.
-            if(oceanAudio) oceanAudio.play();
-            if(musicAudio) musicAudio.play();
+            // --- REPRODUCCIÓN BLINDADA CON PROMESA ---
+            function stablePlay(audioElement, name) {
+                if (audioElement) {
+                    audioElement.play().then(() => {
+                        console.log(`AUDIO_SUCCESS: ${name} reproduciendo.`);
+                    }).catch(error => {
+                        console.error(`AUDIO_BLOCKED: ${name} bloqueado al inicio. Reintentando.`, error);
+                        // Re-intento agresivo
+                        audioElement.play().catch(finalError => console.error(`AUDIO_FAILURE: ${name} fallo definitivo.`, finalError));
+                    });
+                }
+            }
+
+            stablePlay(oceanAudio, "Ocean");
+            stablePlay(musicAudio, "Music");
             
-            // Iniciar animación 3D
             animate();
         });
     }
 
-    // --- CONTROL DE MUTE (Sigue igual) ---
+    // --- CONTROL DE MUTE ---
     const muteBtn = document.getElementById('mute-btn');
     let isMuted = false;
     
